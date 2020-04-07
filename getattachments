@@ -1,0 +1,84 @@
+import imaplib, email, os, socket
+
+def loadfiles():
+    user = 'name'   #Назва поштової скриньки
+    password = 'pass'            #Пароль
+    imap_url = 'url'  #URL електронної пошти
+    attachment_dir = 'folder'   #Папка для зберігання файлів
+    
+    #Встановлюємо папку з скриптом як текучу папку
+    files_dir = os.path.dirname(os.path.realpath(__file__))
+    os.chdir(files_dir)
+    
+    #Видаляємо існуючі файли
+    file_names = ['InternetOK.txt', 'InternetError.txt', "LoginOK.txt", "LoginError.txt", 'LoadStart.txt', 'LoadFinish.txt' ]
+    for name in file_names:
+        if os.path.exists(name):
+            os.remove(name)
+    
+    #Функія створення файла
+    def create_file(name):
+        f = open(name, "x")
+        f.close()
+    
+    #Функція підключення до інтернету
+    def is_connected():
+        try:
+            socket.create_connection(("www.google.com", 80))
+            return True
+        except OSError:
+            pass
+        return False
+    
+    #Функція авторизації в поштовій системі
+    def auth(user,password,imap_url):
+        try:
+            con = imaplib.IMAP4_SSL(imap_url)
+            con.login(user,password)
+            return con
+        except:
+            return False
+    
+    #Фунція зберігання прикріплених файлів
+    def get_attachments(msg):
+        for part in msg.walk():
+            if part.get_content_maintype()=='multipart':
+                continue
+            if part.get('Content-Disposition') is None:
+                continue
+            fileName = part.get_filename()
+    
+            if bool(fileName):
+                filePath = os.path.join(attachment_dir, fileName)
+                with open(filePath,'wb') as f:
+                    f.write(part.get_payload(decode=True))
+    
+    #Функція пошуку повідомлень по поданим критеріям
+    def search(key,value,con):
+        result, data  = con.search(None,key,'"{}"'.format(value))
+        return data
+    
+    #Встановлюємо пробне підключення
+    interCon = is_connected()
+    
+    #Перевіряємо чи пробне підключення існує
+    if interCon:
+        create_file("InternetOK.txt")
+        con = auth(user,password,imap_url)  #Авторизація
+        #Перевіряємо чи авторизація пройшла успішно
+        if con:
+            create_file("LoginOK.txt")
+            con.select('INBOX')    #Вибераємо скриньку "Вхідні"
+            last_id = search('FROM', 'parahailo.bohdan@gmail.com', con)[0].split()[-1] #Критерії пошуку останнього листа
+            result, data = con.fetch(last_id,'(RFC822)') 
+            raw = email.message_from_string(data[0][1]) #Збираємо всю інформацію з повідомлення
+            create_file("LoadStart.txt")
+            get_attachments(raw) #Скачуємо прикріплені файли
+            create_file("LoadFinish.txt")
+        else:
+            create_file("LoginError.txt")
+    else:
+        create_file("InternetError.txt")
+
+#Запускаємо функцію
+loadfiles()
